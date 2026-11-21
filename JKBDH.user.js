@@ -1,18 +1,63 @@
 // ==UserScript==
 // @name         JK Base64 Decoder Hotkey
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.2
 // @description  웹페이지에서 텍스트를 선택하고 지정키 누르면 Base64 디코딩 후 교체 및 복사
 // @author       JKAKK
 // @match        *://*/*
 // @updateURL    https://raw.githubusercontent.com/junsarakill/jk-base64-decode-hotkey/main/JKBDH.user.js
 // @downloadURL  https://raw.githubusercontent.com/junsarakill/jk-base64-decode-hotkey/main/JKBDH.user.js
-// @grant        none
+// @grant        GM_registerMenuCommand
+// @grant        GM_getValue
+// @grant        GM_setValue
 // ==/UserScript==
 
 (function()
 {
     'use strict';
+
+const STORAGE_KEY = "SCRIPT_SETTINGS";
+
+const DEFAULT_SETTINGS =
+{
+    AUTO_URL_OPEN:
+    {
+        value: true,
+        label: "디코드한 url 바로 이동"
+    }
+};
+// 저장된 설정 불러오기
+const SAVED_SETTINGS = GM_getValue(STORAGE_KEY, {});
+
+const CONFIG = {};
+
+for (const [KEY, SETTING] of Object.entries(DEFAULT_SETTINGS))
+{
+    CONFIG[KEY] = SAVED_SETTINGS[KEY] ?? SETTING.value;
+}
+
+function registerMenuCommands()
+{
+    for (const [KEY, SETTING] of Object.entries(DEFAULT_SETTINGS))
+    {
+        GM_registerMenuCommand(
+            `${CONFIG[KEY] ? "✅" : "❌"} ${SETTING.label}`,
+            () =>
+            {
+                CONFIG[KEY] = !CONFIG[KEY];
+
+                GM_setValue(STORAGE_KEY, CONFIG);
+
+                window.location.reload();
+            }
+        );
+    }
+}
+
+if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', registerMenuCommands);
+else
+    registerMenuCommands();
 
     // Base64 디코딩 함수 (UTF-8 지원)
     function decodeBase64(base64)
@@ -150,22 +195,48 @@
         }
 
         const decoded = decodeBase64(selectedText);
-        if (decoded !== null)
+
+if (decoded !== null)
+{
+    // 텍스트 교체 및 클립보드 복사
+    const success = replaceSelectedText(decoded);
+
+    if (success)
+    {
+        navigator.clipboard.writeText(decoded).then(() =>
         {
-            const success = replaceSelectedText(decoded);
-            if (success)
-            {
-                navigator.clipboard.writeText(decoded).then(() =>
-                {
-                    showToast(`디코딩 & 텍스트 교체 완료:\n${decoded.substring(0, 50)}${decoded.length > 50 ? '...' : ''}`, true, targetRect);
-                });
-            }
-            else
-                showToast('텍스트 교체에 실패했습니다.', false, targetRect);
-        }
-        else
-            showToast('유효한 Base64 형식이 아닙니다.', false, targetRect);
+            showToast(`디코딩 & 텍스트 교체 완료:\n${decoded.substring(0, 50)}${decoded.length > 50 ? '...' : ''}`, true, targetRect);
+        });
     }
+    else
+        showToast('텍스트 교체에 실패했습니다.', false, targetRect);
+
+    // URL 자동 열기
+    openURL(decoded);
+}
+else
+    showToast('유효한 Base64 형식이 아닙니다.', false, targetRect);
+    }
+
+    function openURL(url)
+{
+    if (!CONFIG.AUTO_URL_OPEN)
+        return;
+
+    try
+    {
+        const URL_OBJ = new URL(url);
+
+        if (URL_OBJ.protocol !== "http:" && URL_OBJ.protocol !== "https:")
+            return;
+
+        window.open(URL_OBJ.href, "_blank");
+    }
+    catch (e)
+    {
+        // 유효하지 않은 URL
+    }
+}
 
     // 단축키 이벤트 리스너
     document.addEventListener('keydown', function(e)
